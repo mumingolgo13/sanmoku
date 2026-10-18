@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>三目並べ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kaisei+Decol:wght@700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
+<style>
+/* Layout: one-screen app, centered column — header, mode chips, square board, score strip */
+:root{
+  --bg:#f3f5fa; --panel:#ffffff; --ink:#1d2b53; --muted:#6a7593;
+  --line:#2a3d74; --o:#23408e; --x:#c8452d; --win:#ffe9a8; --chip:#e3e8f4;
+  --display:"Kaisei Decol","Hiragino Mincho ProN",serif;
+  --body:"Zen Maru Gothic","Hiragino Sans","Noto Sans JP",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1730; --panel:#17224a; --ink:#e6eaf7; --muted:#9aa5c6;
+  --line:#7f93d6; --o:#8fb0ff; --x:#ff8a6e; --win:#3a3a1e; --chip:#22305e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1730; --panel:#17224a; --ink:#e6eaf7; --muted:#9aa5c6;
+  --line:#7f93d6; --o:#8fb0ff; --x:#ff8a6e; --win:#3a3a1e; --chip:#22305e; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  -webkit-tap-highlight-color:transparent;user-select:none}
+.app{max-width:440px;margin:0 auto;padding-block:20px 28px;display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+h1{font-family:var(--display);font-size:2rem;margin:0;letter-spacing:.08em;text-wrap:balance}
+h1 span{color:var(--x)}
+.sub{color:var(--muted);font-size:.8rem;letter-spacing:.05em}
+.modes{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:0;border-radius:999px;padding:9px 14px;font:700 .9rem var(--body);background:var(--chip);color:var(--ink);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.chip:focus-visible,.cell:focus-visible,.btn:focus-visible{outline:3px solid var(--x);outline-offset:2px}
+.status{font-size:1.15rem;font-weight:700;min-height:1.6em;display:flex;align-items:center;gap:8px}
+.status .mk{width:1.4em;height:1.4em}
+.board{position:relative;width:100%;max-width:100%;aspect-ratio:1;display:grid;grid-template-columns:repeat(3,1fr);
+  background:var(--panel);border-radius:14px;padding:6px;box-shadow:0 6px 24px rgba(20,30,70,.12)}
+.cell{border:0;background:transparent;padding:10%;cursor:pointer;position:relative;border-radius:8px}
+.cell:nth-child(3n+1),.cell:nth-child(3n+2){border-right:3px solid var(--line)}
+.cell:nth-child(-n+6){border-bottom:3px solid var(--line)}
+.cell.win{background:var(--win)}
+.cell svg{width:100%;height:100%;display:block}
+.mk path,.mk circle{fill:none;stroke-width:12;stroke-linecap:round}
+.mk.o circle{stroke:var(--o)}
+.mk.x path{stroke:var(--x)}
+.draw circle,.draw path{stroke-dasharray:260;stroke-dashoffset:260;animation:ink .32s ease-out forwards}
+.draw path+path{animation-delay:.14s}
+@keyframes ink{to{stroke-dashoffset:0}}
+.score{display:grid;grid-template-columns:repeat(3,1fr);background:var(--panel);border-radius:12px;padding:10px 6px;text-align:center}
+.score div{display:flex;flex-direction:column;gap:2px}
+.score b{font-size:1.6rem;font-variant-numeric:tabular-nums}
+.score small{color:var(--muted);font-size:.75rem;letter-spacing:.1em}
+.actions{display:flex;gap:10px}
+.btn{flex:1;border:0;border-radius:12px;padding:14px;font:700 1rem var(--body);cursor:pointer;background:var(--ink);color:var(--bg)}
+.btn.ghost{background:var(--chip);color:var(--ink)}
+@media (prefers-reduced-motion:reduce){.draw circle,.draw path{animation:none;stroke-dashoffset:0}}
+</style>
+<style>body{margin:0;font-size:14px}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <h1>三目<span>並べ</span></h1>
+    <span class="sub">TIC-TAC-TOE</span>
+  </header>
+
+  <div class="modes" role="group" aria-label="対戦モード">
+    <button class="chip" id="m-2p" data-mode="2p" aria-pressed="true">ふたりで</button>
+    <button class="chip" id="m-easy" data-mode="easy" aria-pressed="false">CPU よわい</button>
+    <button class="chip" id="m-hard" data-mode="hard" aria-pressed="false">CPU つよい</button>
+  </div>
+
+  <div class="status" id="status" aria-live="polite"></div>
+
+  <div class="board" id="board"></div>
+
+  <div class="score">
+    <div><b id="s-o">0</b><small>○ の勝ち</small></div>
+    <div><b id="s-d">0</b><small>引き分け</small></div>
+    <div><b id="s-x">0</b><small>× の勝ち</small></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="next">次の対局</button>
+    <button class="btn ghost" id="reset">得点リセット</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const LINES=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  const SVG={
+    o:'<svg class="mk o draw" viewBox="0 0 100 100"><circle cx="50" cy="50" r="34" transform="rotate(-90 50 50)"/></svg>',
+    x:'<svg class="mk x draw" viewBox="0 0 100 100"><path d="M18 18 L82 82"/><path d="M82 18 L18 82"/></svg>'
+  };
+  const boardEl=document.getElementById('board'), statusEl=document.getElementById('status');
+  let cells=Array(9).fill(null), turn='o', over=false, mode='2p', starter='o', busy=false;
+  let score={o:0,x:0,d:0};
+  try{const s=JSON.parse(localStorage.getItem('sanmoku-score')||'null'); if(s) score=s;}catch(e){}
+  try{const m=localStorage.getItem('sanmoku-mode'); if(m) mode=m;}catch(e){}
+
+  for(let i=0;i<9;i++){
+    const b=document.createElement('button');
+    b.className='cell'; b.id='c'+i; b.setAttribute('aria-label',(Math.floor(i/3)+1)+'行'+(i%3+1)+'列');
+    b.addEventListener('click',()=>human(i));
+    boardEl.appendChild(b);
+  }
+  const cellEls=[...boardEl.children];
+
+  function winner(c){
+    for(const l of LINES){const[a,b,d]=l; if(c[a]&&c[a]===c[b]&&c[a]===c[d]) return {p:c[a],line:l};}
+    return c.every(Boolean)?{p:'d'}:null;
+  }
+  function mark(p){return SVG[p].replace(' draw','');}
+  function setStatus(){
+    const r=winner(cells);
+    if(r&&r.p==='d') statusEl.innerHTML='引き分けです';
+    else if(r) statusEl.innerHTML=mark(r.p)+(mode!=='2p'?(r.p==='o'?'あなたの勝ち！':'CPU の勝ち'):'の勝ち！');
+    else if(mode!=='2p'&&turn==='x') statusEl.innerHTML=mark('x')+'CPU が考え中…';
+    else statusEl.innerHTML=mark(turn)+(mode!=='2p'?'あなたの番です':'の番です');
+  }
+  function place(i,p){
+    cells[i]=p; cellEls[i].innerHTML=SVG[p]; cellEls[i].setAttribute('aria-label',cellEls[i].getAttribute('aria-label')+' '+(p==='o'?'まる':'ばつ'));
+    const r=winner(cells);
+    if(r){over=true; score[r.p]++; save(); if(r.line) r.line.forEach(k=>cellEls[k].classList.add('win'));}
+    else turn=p==='o'?'x':'o';
+    renderScore(); setStatus();
+  }
+  function human(i){
+    if(over||busy||cells[i]) return;
+    if(mode!=='2p'&&turn==='x') return;
+    place(i,turn);
+    if(!over&&mode!=='2p') cpuMove();
+  }
+  function cpuMove(){
+    busy=true; setStatus();
+    setTimeout(()=>{place(choose(),'x'); busy=false;},420);
+  }
+  function choose(){
+    const empty=cells.map((v,i)=>v?null:i).filter(v=>v!==null);
+    if(mode==='easy'){
+      // よわい: 勝てる手だけは打つ、あとはランダム
+      for(const i of empty){const t=cells.slice();t[i]='x';if(winner(t)?.p==='x')return i;}
+      return empty[Math.floor(Math.random()*empty.length)];
+    }
+    let best=-Infinity, moves=[];
+    for(const i of empty){
+      const t=cells.slice(); t[i]='x'; const v=minimax(t,'o',0);
+      if(v>best){best=v;moves=[i];} else if(v===best) moves.push(i);
+    }
+    return moves[Math.floor(Math.random()*moves.length)];
+  }
+  function minimax(c,p,depth){
+    const r=winner(c);
+    if(r) return r.p==='x'?10-depth:r.p==='o'?depth-10:0;
+    let best=p==='x'?-Infinity:Infinity;
+    for(let i=0;i<9;i++) if(!c[i]){
+      c[i]=p; const v=minimax(c,p==='x'?'o':'x',depth+1); c[i]=null;
+      best=p==='x'?Math.max(best,v):Math.min(best,v);
+    }
+    return best;
+  }
+  function newGame(){
+    cells=Array(9).fill(null); over=false; busy=false;
+    cellEls.forEach((e,i)=>{e.innerHTML='';e.classList.remove('win');e.setAttribute('aria-label',(Math.floor(i/3)+1)+'行'+(i%3+1)+'列');});
+    starter=starter==='o'?'x':'o'; turn=starter;   // 先手は交互
+    setStatus();
+    if(mode!=='2p'&&turn==='x') cpuMove();
+  }
+  function renderScore(){
+    document.getElementById('s-o').textContent=score.o;
+    document.getElementById('s-x').textContent=score.x;
+    document.getElementById('s-d').textContent=score.d;
+  }
+  function save(){try{localStorage.setItem('sanmoku-score',JSON.stringify(score));}catch(e){}}
+  function setMode(m){
+    mode=m; try{localStorage.setItem('sanmoku-mode',m);}catch(e){}
+    document.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c.dataset.mode===m));
+    score={o:0,x:0,d:0}; save(); renderScore();
+    starter='x'; newGame(); // 切り替え直後は○（あなた）が先手
+  }
+  document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>setMode(c.dataset.mode)));
+  document.getElementById('next').addEventListener('click',newGame);
+  document.getElementById('reset').addEventListener('click',()=>{score={o:0,x:0,d:0};save();renderScore();});
+
+  document.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',c.dataset.mode===mode));
+  renderScore(); setStatus();
+})();
+</script>
+</body>
+</html>
